@@ -1,7 +1,9 @@
 import streamlit as st
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
+
+st.set_page_config(page_title="Simulador d'aeronaus", layout="wide")
 
 avions_df = pd.DataFrame({
     "nom": ["Cessna172", "Boeing747", "AirbusA320", "Stuka", "B29", "F16"],
@@ -14,58 +16,61 @@ avions_df = pd.DataFrame({
     "coef_sustentacio": [1.2, 1.5, 1.4, 1.3, 1.4, 1.3]
 })
 
-st.title("Simulador D'aeronaus")
+st.title("Simulador d'aeronaus")
 
-avio_seleccionat = st.selectbox("Tria l'avió:", avions_df["nom"])
-velocitat_max = int(avions_df[avions_df["nom"]==avio_seleccionat]["velocitat_max"])
-velocitat = st.slider("Velocitat (m/s)", 0, velocitat_max, velocitat_max)
+col1, col2 = st.columns([1,2])
 
-dades = avions_df[avions_df["nom"]==avio_seleccionat].iloc[0]
-rho, S, CL, m, mida = 1.225, dades["area_ala"], dades["coef_sustentacio"], dades["massa"], dades["longitud"]/20
+with col1:
+    avion_seleccionat = st.selectbox("Selecciona un avion", avions_df["nom"])
+    velocitat = st.slider("Velocitat (m/s)", 0, int(avions_df[avions_df["nom"]==avion_seleccionat]["velocitat_max"].values[0]),
+                          int(avions_df[avions_df["nom"]==avion_seleccionat]["velocitat_max"].values[0]/2))
 
-L = 0.5 * rho * velocitat**2 * S * CL
-W = m * 9.81
-T = 200 * velocitat
-D = 0.5 * rho * velocitat**2 * S * 0.02
+def calcular_vectors(avion, v):
+    dades = avions_df[avions_df["nom"]==avion].iloc[0]
+    rho, S, CL, m, tam = dades["densitat_aire"], dades["area_ala"], dades["coef_sustentacio"], dades["massa"], dades["longitud"]/20
+    L = 0.5 * rho * v**2 * S * CL
+    W = m * 9.81
+    T = 0.5 * v * 2000
+    D = 50000
+    inclinacio = 0.2 if L >= W else -0.2
+    return L, W, T, D, tam, inclinacio
 
-angle = -0.3 if L < W else max(min((T - D) * 0.00000002, 0.4), -0.4)
+L, W, T, D, tam, inclinacio = calcular_vectors(avion_seleccionat, velocitat)
 
-fig = plt.figure(figsize=(6,5))
-ax = fig.add_subplot(111, projection="3d")
-ax.set_box_aspect([1,1,1])
+fig = go.Figure()
 
-rot = np.array([
-    [np.cos(angle),0,np.sin(angle)],
-    [0,1,0],
-    [-np.sin(angle),0,np.cos(angle)]
-])
 
-fuselatge = np.array([[-2*mida,0,0],[2*mida,0,0]]) @ rot.T
-ax.plot(fuselatge[:,0], fuselatge[:,1], fuselatge[:,2], color="gray", linewidth=6)
+fuselatge_x = [-2*tam, 2*tam]
+fuselatge_y = [0,0]
+fuselatge_z = [0,0]
+fig.add_trace(go.Scatter3d(x=fuselatge_x, y=fuselatge_y, z=fuselatge_z, mode="lines",
+                           line=dict(color="gray", width=6), name="Fuselatge"))
 
-alas = np.array([[0,-3*mida,0],[0,3*mida,0]]) @ rot.T
-ax.plot(alas[:,0], alas[:,1], alas[:,2], color="gray", linewidth=6)
+alas_x = [0,0]
+alas_y = [-3*tam,3*tam]
+alas_z = [0,0]
+fig.add_trace(go.Scatter3d(x=alas_x, y=alas_y, z=alas_z, mode="lines",
+                           line=dict(color="gray", width=6), name="Ales"))
 
-cola = np.array([[-1.5*mida,0,0],[-2.2*mida,0,1*mida]]) @ rot.T
-ax.plot(cola[:,0], cola[:,1], cola[:,2], color="gray", linewidth=4)
 
-vec_L = np.array([0,0,L]) @ rot.T
-vec_W = np.array([0,0,-W]) @ rot.T
-vec_T = np.array([T,0,0]) @ rot.T if T-D>=0 else np.array([-T,0,0]) @ rot.T
-vec_D = np.array([-D,0,0]) @ rot.T if T-D>=0 else np.array([D,0,0]) @ rot.T
+escala = tam / max(L, W, T, D) * 5
+fig.add_trace(go.Cone(x=[0], y=[0], z=[0], u=[0], v=[0], w=[L*escala], sizemode="absolute",
+                      anchor="tail", colorscale=[[0,"blue"],[1,"blue"]], showscale=False, name="Sustentació"))
+fig.add_trace(go.Cone(x=[0], y=[0], z=[0], u=[0], v=[0], w=[-W*escala], sizemode="absolute",
+                      anchor="tail", colorscale=[[0,"red"],[1,"red"]], showscale=False, name="Pes"))
+fig.add_trace(go.Cone(x=[0], y=[0], z=[0], u=[T*escala], v=[0], w=[0], sizemode="absolute",
+                      anchor="tail", colorscale=[[0,"purple"],[1,"purple"]], showscale=False, name="Empuje"))
+fig.add_trace(go.Cone(x=[0], y=[0], z=[0], u=[-D*escala], v=[0], w=[0], sizemode="absolute",
+                      anchor="tail", colorscale=[[0,"green"],[1,"green"]], showscale=False, name="Drag"))
 
-escala = mida / max(L, W, abs(T), D, 1) * 5
+fig.update_layout(scene=dict(
+    xaxis=dict(range=[-5*tam,5*tam], visible=False),
+    yaxis=dict(range=[-5*tam,5*tam], visible=False),
+    zaxis=dict(range=[-5*tam,5*tam], visible=False)
+),
+                  margin=dict(l=0,r=0,b=0,t=0),
+                  showlegend=True)
 
-ax.quiver(0,0,0, vec_L[0]*escala, vec_L[1]*escala, vec_L[2]*escala, color="blue", linewidth=3)
-ax.quiver(0,0,0, vec_W[0]*escala, vec_W[1]*escala, vec_W[2]*escala, color="red", linewidth=3)
-ax.quiver(0,0,0, vec_T[0]*escala, vec_T[1]*escala, vec_T[2]*escala, color="purple", linewidth=3)
-ax.quiver(0,0,0, vec_D[0]*escala, vec_D[1]*escala, vec_D[2]*escala, color="green", linewidth=3)
-
-ax.set_xlim(-6*mida,6*mida)
-ax.set_ylim(-6*mida,6*mida)
-ax.set_zlim(-6*mida,6*mida)
-
-estat_vertical = "Vola" if L >= W else "No vola"
-ax.set_title(f"{avio_seleccionat}\n{estat_vertical}\nL={L:.0f}N  W={W:.0f}N  T={T:.0f}N  D={D:.0f}N", fontsize=12)
-
-st.pyplot(fig)
+with col2:
+    st.plotly_chart(fig, use_container_width=True)
+    st.write(f"Sustentació: {L:.0f} N, Pes: {W:.0f} N, Empuje: {T:.0f} N, Drag: {D:.0f} N")
