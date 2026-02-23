@@ -22,8 +22,8 @@ col1, col2 = st.columns([1,2])
 
 with col1:
     avion_seleccionat = st.selectbox("Selecciona un avion", avions_df["nom"])
-    velocitat = st.slider("Velocitat (m/s)", 0, int(avions_df[avions_df["nom"]==avion_seleccionat]["velocitat_max"].values[0]),
-                          int(avions_df[avions_df["nom"]==avion_seleccionat]["velocitat_max"].values[0]/2))
+    velocitat_max = int(avions_df[avions_df["nom"]==avion_seleccionat]["velocitat_max"].values[0])
+    velocitat = st.slider("Velocitat (m/s)", 0, velocitat_max, int(velocitat_max/2))
 
 def calcular_vectors(avion, v):
     dades = avions_df[avions_df["nom"]==avion].iloc[0]
@@ -74,3 +74,4 @@ fig.update_layout(scene=dict(
 with col2:
     st.plotly_chart(fig, use_container_width=True)
     st.write(f"Sustentació: {L:.0f} N, Pes: {W:.0f} N, Empuje: {T:.0f} N, Drag: {D:.0f} N")
+
